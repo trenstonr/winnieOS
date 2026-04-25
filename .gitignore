@@ -1,0 +1,9 @@
+*.o
+*.bin
+*.elf
+*.iso
+
+isodir/
+
+myos
+winnieos
