@@ -1,13 +1,13 @@
 CC	:= i686-elf-gcc
 AS	:= i686-elf-as
-CFLAGS	:= -std=gnu99 -ffreestanding -O2 -Wall -Wextra
+CFLAGS	:= -std=gnu99 -ffreestanding -O2 -Wall -Wextra -I include/
 LFLAGS	:= -ffreestanding -O2 -nostdlib -lgcc
 
 TARGET 	:= myos
 ISO	:= myos.iso
 ISODIR 	:= isodir
 
-OBJS	:= boot/boot.o kernel/kernel.o
+OBJS	:= boot/boot.o kernel/kernel.o drivers/vga.o
 
 .PHONY: all iso clean run
 
