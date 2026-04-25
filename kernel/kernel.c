@@ -111,29 +111,29 @@ void newline() {
 		scroll();
 }
 
-void terminal_putchar(char c) 
+void terminal_putchar(char c, enum vga_color color) 
 {
 	if (c == '\n') {
 		newline();
 		return;
 	}
 
-	terminal_putentryat(c, terminal_color, terminal_column, terminal_row);
+	terminal_putentryat(c, color, terminal_column, terminal_row);
 
 	terminal_column++;
 	if (terminal_column == VGA_WIDTH)
 		newline();
 }
 
-void terminal_write(const char* data, size_t size) 
+void terminal_write(const char* data, size_t size, enum vga_color color) 
 {
 	for (size_t i = 0; i < size; i++)
-		terminal_putchar(data[i]);
+		terminal_putchar(data[i], color);
 }
 
-void terminal_writestring(const char* data) 
+void terminal_writestring(const char* data, enum vga_color color) 
 {
-	terminal_write(data, strlen(data));
+	terminal_write(data, strlen(data), color);
 }
 
 void kernel_main(void) 
@@ -142,8 +142,8 @@ void kernel_main(void)
 	terminal_initialize();
 
 	/* Newline support is left as an exercise. */
-	terminal_writestring("START***************");
+	terminal_writestring("START***************", VGA_COLOR_WHITE);
 	for (int i = 0; i < VGA_HEIGHT * 2; i++)
-		terminal_writestring("Hello, kernel World!\n");
-	terminal_writestring("END*****************");
+		terminal_writestring("Hello, kernel World!\n", VGA_COLOR_WHITE);
+	terminal_writestring("END*****************", VGA_COLOR_RED);
 }
