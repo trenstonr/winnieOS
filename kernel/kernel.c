@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include <drivers/vga.h>
+#include <lib/printf.h>
 
 /* Check if the compiler thinks you are targeting the wrong operating system. */
 #if defined(__linux__)
@@ -20,8 +21,11 @@ void kernel_main(void)
 	terminal_initialize();
 
 	/* Newline support is left as an exercise. */
-	terminal_writestring("START***************", VGA_COLOR_WHITE);
+	/*terminal_writestring("START***************", VGA_COLOR_WHITE);
 	for (int i = 0; i < VGA_HEIGHT * 2; i++)
 		terminal_writestring("Hello, kernel World!\n", VGA_COLOR_WHITE);
 	terminal_writestring("END*****************", VGA_COLOR_RED);
+	*/
+
+	printf("test1: %s, test2: %s,\ntest3: %s !", "abc", "ABC", "Abc");
 }
