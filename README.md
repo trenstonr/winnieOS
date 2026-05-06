@@ -1,3 +1,5 @@
 work-in-progress operating system from scratch
-- reference: osdev.wiki
-- name: named after my dog winnie
+
+named after my dog winnie
+
+reference: osdev.wiki
