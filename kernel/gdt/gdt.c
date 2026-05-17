@@ -1,6 +1,32 @@
 #include "gdt.h"
+#include <stdint.h>
 
-void encode_entry(uint8_t *target, SegmentDescriptor source) {
+#define BASE			0x0
+#define LIMIT			0xFFFF
+#define K_MODE_CS_ACCESS	0x9A
+#define K_MODE_DS_ACCESS	0x92
+#define U_MODE_CS_ACCESS	0xFA
+#define U_MODE_DS_ACCESS	0xF2
+#define FLAGS			0xC
+
+typedef struct {
+	unsigned int 	limit : 20;
+	uint32_t	base;
+	uint8_t		access;
+	unsigned int	flags : 4;
+} SegmentDescriptor;
+
+typedef struct {
+	SegmentDescriptor entries[6];
+} GDT;
+
+extern void setGdt(uint16_t limit, uint32_t base);
+extern void reloadSegments();
+
+static GDT table = {};
+static uint64_t encoded_table[6];
+
+static void encode_entry(uint8_t *target, SegmentDescriptor source) {
 	// encode limit
 	target[0] = source.limit & 0xFF;
 	target[1] = (source.limit >> 8) & 0xFF;
@@ -46,4 +72,7 @@ void gdt_init() {
 	}
 
 	// do assembly lgdt
+	// (sizeof(table) - 1, base addr)
+	setGdt(47, (uint32_t)encoded_table);
+	reloadSegments();
 }
