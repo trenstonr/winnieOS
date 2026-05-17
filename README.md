@@ -2,7 +2,7 @@ work-in-progress operating system from scratch
 ## 
 
 #### Working on:
- - Currently migrating from x86 to x86-64
+ - Migrating from x86 to x86-64
 
 #### Done:
  - Global Descriptor Table
