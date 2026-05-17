@@ -15,17 +15,14 @@
 #error "This tutorial needs to be compiled with a ix86-elf compiler"
 #endif
 
+#include "gdt/gdt.h" 
+
 void kernel_main(void) 
 {
-	/* Initialize terminal interface */
+	// initalize global descriptor table
+	gdt_init();
+	
 	terminal_initialize();
-
-	/* Newline support is left as an exercise. */
-	/*terminal_writestring("START***************", VGA_COLOR_WHITE);
-	for (int i = 0; i < VGA_HEIGHT * 2; i++)
-		terminal_writestring("Hello, kernel World!\n", VGA_COLOR_WHITE);
-	terminal_writestring("END*****************", VGA_COLOR_RED);
-	*/
 
 	printf("test1: %s, test2: %s,\ntest3: %s !", "abc", "ABC", "Abc");
 }
