@@ -1,13 +1,15 @@
 #ifndef GDT_H
 #define GDT_H
 
-#DEFINE BASE			0x0
-#DEFINE LIMIT			0xFFFF
-#DEFINE K_MODE_CS_ACCESS	0x9A
-#DEFINE K_MODE_DS_ACCESS	0x92
-#DEFINE U_MODE_CS_ACCESS	0xFA
-#DEFINE U_MODE_DS_ACCESS	0xF2
-#DEFINE FLAGS			0xC
+#include <stdint.h>
+
+#define BASE			0x0
+#define LIMIT			0xFFFF
+#define K_MODE_CS_ACCESS	0x9A
+#define K_MODE_DS_ACCESS	0x92
+#define U_MODE_CS_ACCESS	0xFA
+#define U_MODE_DS_ACCESS	0xF2
+#define FLAGS			0xC
 
 // global descriptor table register
 volatile uint16_t gdtr;
@@ -21,14 +23,15 @@ typedef struct {
 } SegmentDescriptor;
 
 // global descriptor table
-struct GDT table {
+typedef struct {
 	SegmentDescriptor entries[6];
-};
+} GDT;
 
-
-void encode_entry(uint8_t *entry); 
-void gdt_init();
-
+GDT table = {};
 uint64_t encoded_table[6];
+
+void encode_entry(uint8_t *target, SegmentDescriptor source);
+
+void gdt_init();
 
 #endif

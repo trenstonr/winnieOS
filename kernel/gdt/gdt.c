@@ -1,4 +1,4 @@
-#includje "gdt.h"
+#include "gdt.h"
 
 void encode_entry(uint8_t *target, SegmentDescriptor source) {
 	// encode limit
@@ -21,28 +21,28 @@ void encode_entry(uint8_t *target, SegmentDescriptor source) {
 
 void gdt_init() {
 	// null descriptor
-	table[0].base = 0x0;
-	table[0].limit = 0x0;
-	table[0].access = 0x0;
-	table[0].flags = 0x0;
+	table.entries[0].base = 0x0;
+	table.entries[0].limit = 0x0;
+	table.entries[0].access = 0x0;
+	table.entries[0].flags = 0x0;
 
 	// segments
 	for (int i = 1; i < 5; i++) {
-		table[i].base = BASE;
-		table[i].limit = LIMIT;
-		table[i].flags = FLAGS;
+		table.entries[i].base = BASE;
+		table.entries[i].limit = LIMIT;
+		table.entries[i].flags = FLAGS;
 	}
 
-	table[1].access = K_MODE_CS_ACCESS;
-	table[2].access = K_MODE_DS_ACCESS;
-	table[3].access = U_MODE_CS_ACCESS;
-	table[4].access = U_MODE_DS_ACCESS;
+	table.entries[1].access = K_MODE_CS_ACCESS;
+	table.entries[2].access = K_MODE_DS_ACCESS;
+	table.entries[3].access = U_MODE_CS_ACCESS;
+	table.entries[4].access = U_MODE_DS_ACCESS;
 
 	// task state segment
 	// to-do
 	
-	for (int i = 0; i < 6) {
-		encode_entry(&encoded_table[i], table.entries[i]);
+	for (int i = 0; i < 6; i++) {
+		encode_entry((uint8_t *)&encoded_table[i], table.entries[i]);
 	}
 
 	// do assembly lgdt
