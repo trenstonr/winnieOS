@@ -2,14 +2,14 @@ work-in-progress operating system from scratch
 ## 
 
 #### Working on:
- - Migrating from x86 to x86-64
+ - Interrupt Descriptor Table
 
 #### Done:
+ - Migrating from x86 to x86-64
  - Global Descriptor Table
  - VGA terminal driver
 
 #### Roadmap:
- - Interrupt Descriptor Table
  - Physical memory manager  
  - Virtual memory / paging
  - Scheduler
