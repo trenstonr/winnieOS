@@ -13,6 +13,7 @@ work-in-progress operating system from scratch
  - Physical memory manager  
  - Virtual memory / paging
  - Scheduler
+ - Concurrency
  - Basic PCI driver
 
 ##
