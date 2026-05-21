@@ -22,9 +22,13 @@ SECTIONS
 	/* First put the multiboot header, as it is required to be put very early
 	   in the image or the bootloader won't recognize the file format.
 	   Next we'll put the .text section. */
-	.text BLOCK(4K) : ALIGN(4K)
+	.multiboot BLOCK(4K) : ALIGN(4K)
 	{
 		*(.multiboot)
+	}
+
+	.text BLOCK(4K) : ALIGN(4K)
+	{
 		*(.text)
 	}
 

@@ -1,7 +1,7 @@
-CC	:= i686-elf-gcc
-AS	:= i686-elf-as
-CFLAGS	:= -std=gnu99 -ffreestanding -O2 -Wall -Wextra -I include/
-LFLAGS	:= -ffreestanding -O2 -nostdlib -lgcc
+CC	:= x86_64-elf-gcc
+AS	:= x86_64-elf-as
+CFLAGS	:= -std=gnu99 -ffreestanding -O2 -Wall -Wextra -mno-red-zone -mgeneral-regs-only -mno-sse -mno-sse2 -mno-mmx -mno-80387 -I include/
+LFLAGS := -ffreestanding -O2 -nostdlib -lgcc -Wl,-z,max-page-size=0x1000
 
 TARGET 	:= myos
 ISO	:= myos.iso
@@ -9,8 +9,6 @@ ISODIR 	:= isodir
 
 OBJS	:= boot/boot.o \
 	   kernel/kernel.o \
-	   kernel/gdt/gdt.o \
-	   kernel/gdt/gdt_asm.o \
 	   drivers/vga.o \
 	   lib/printf.o
 
@@ -43,4 +41,4 @@ clean:
 	rm -rf $(ISODIR) $(ISO)
 
 run: iso
-	qemu-system-i386 -cdrom $(ISO)
+	qemu-system-x86_64 -boot d -cdrom $(ISO) -no-reboot -no-shutdown

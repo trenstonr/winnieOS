@@ -1,106 +1,153 @@
-/* Declare constants for the multiboot header. */
-.set ALIGN,    1<<0             /* align loaded modules on page boundaries */
-.set MEMINFO,  1<<1             /* provide memory map */
-.set FLAGS,    ALIGN | MEMINFO  /* this is the Multiboot 'flag' field */
-.set MAGIC,    0x1BADB002       /* 'magic number' lets bootloader find the header */
-.set CHECKSUM, -(MAGIC + FLAGS) /* checksum of above, to prove we are multiboot */
+.section .multiboot, "a"
+.align 8
+multiboot_start:
+    .long 0xE85250D6           # magic
+    .long 0                    # architecture (i386)
+    .long multiboot_end - multiboot_start   # length
+    .long -(0xE85250D6 + 0 + (multiboot_end - multiboot_start))  # checksum
+    # end tag
+    .word 0    # type
+    .word 0    # flags
+    .long 8    # size
+multiboot_end:
 
-/* 
-Declare a multiboot header that marks the program as a kernel. These are magic
-values that are documented in the multiboot standard. The bootloader will
-search for this signature in the first 8 KiB of the kernel file, aligned at a
-32-bit boundary. The signature is in its own section so the header can be
-forced to be within the first 8 KiB of the kernel file.
-*/
-.section .multiboot
-.align 4
-.long MAGIC
-.long FLAGS
-.long CHECKSUM
 
-/*
-The multiboot standard does not define the value of the stack pointer register
-(esp) and it is up to the kernel to provide a stack. This allocates room for a
-small stack by creating a symbol at the bottom of it, then allocating 16384
-bytes for it, and finally creating a symbol at the top. The stack grows
-downwards on x86. The stack is in its own section so it can be marked nobits,
-which means the kernel file is smaller because it does not contain an
-uninitialized stack. The stack on x86 must be 16-byte aligned according to the
-System V ABI standard and de-facto extensions. The compiler will assume the
-stack is properly aligned and failure to align the stack will result in
-undefined behavior.
-*/
 .section .bss
+
+// stack
 .align 16
 stack_bottom:
 .skip 16384 # 16 KiB
 stack_top:
 
-/*
-The linker script specifies _start as the entry point to the kernel and the
-bootloader will jump to this position once the kernel has been loaded. It
-doesn't make sense to return from this function as the bootloader is gone.
-*/
+// page tables
+.align 4096
+pml4:
+.skip 4096
+pdpt:
+.skip 4096
+pd:
+.skip 4096
+
+
+.section .rodata
+
+GDT:
+.Null:
+.quad 0x0000000000000000
+.Code:
+.quad 0x00209A0000000000
+.quad 0x0000920000000000
+.align 4
+.word 0
+.Pointer:
+.word . - GDT - 1
+.long GDT
+
+
 .section .text
+
 .global _start
 .type _start, @function
+.code32
 _start:
-	/*
-	The bootloader has loaded us into 32-bit protected mode on a x86
-	machine. Interrupts are disabled. Paging is disabled. The processor
-	state is as defined in the multiboot standard. The kernel has full
-	control of the CPU. The kernel can only make use of hardware features
-	and any code it provides as part of itself. There's no printf
-	function, unless the kernel provides its own <stdio.h> header and a
-	printf implementation. There are no security restrictions, no
-	safeguards, no debugging mechanisms, only what the kernel provides
-	itself. It has absolute and complete power over the
-	machine.
-	*/
+	cli
 
-	/*
-	To set up a stack, we set the esp register to point to the top of the
-	stack (as it grows downwards on x86 systems). This is necessarily done
-	in assembly as languages such as C cannot function without a stack.
-	*/
+	// initalize stack
 	mov $stack_top, %esp
 
-	/*
-	This is a good place to initialize crucial processor state before the
-	high-level kernel is entered. It's best to minimize the early
-	environment where crucial features are offline. Note that the
-	processor is not fully initialized yet: Features such as floating
-	point instructions and instruction set extensions are not initialized
-	yet. The GDT should be loaded here. Paging should be enabled here.
-	C++ features such as global constructors and exceptions will require
-	runtime support to work as well.
-	*/
+	movl $0x2f4b2f4f, 0xb8000
 
-	/*
-	Enter the high-level kernel. The ABI requires the stack is 16-byte
-	aligned at the time of the call instruction (which afterwards pushes
-	the return pointer of size 4 bytes). The stack was originally 16-byte
-	aligned above and we've pushed a multiple of 16 bytes to the
-	stack since (pushed 0 bytes so far), so the alignment has thus been
-	preserved and the call is well defined.
-	*/
-	call kernel_main
+	// check if CPUID is supported
+	check_cpuid:
+	pushfl
+	pop %eax
+	mov %eax, %ecx
+	xor $(1 << 21), %eax
+	push %eax
+	popfl
+	pushfl
+	pop %eax
+	xor %ecx, %eax
+	and $(1 << 21), %eax
+	jz no_cpuid
 
-	/*
-	If the system has nothing more to do, put the computer into an
-	infinite loop. To do that:
-	1) Disable interrupts with cli (clear interrupt enable in eflags).
-	   They are already disabled by the bootloader, so this is not needed.
-	   Mind that you might later enable interrupts and return from
-	   kernel_main (which is sort of nonsensical to do).
-	2) Wait for the next interrupt to arrive with hlt (halt instruction).
-	   Since they are disabled, this will lock up the computer.
-	3) Jump to the hlt instruction if it ever wakes up due to a
-	   non-maskable interrupt occurring or due to system management mode.
-	*/
-	cli
-1:	hlt
+	// check if long mode is supported
+	check_long_mode:
+	mov $0x80000000, %eax
+	cpuid
+	cmp $0x80000001, %eax
+	jb no_long_mode
+	mov $0x80000001, %eax
+	cpuid
+	test $(1 << 29), %edx
+	jz no_long_mode
+
+	link_page_table:
+	mov $pdpt + 3, %eax // set first 2 bits (+ 3)
+	movl %eax, (pml4)
+	mov $pd + 3, %eax
+	movl %eax, (pdpt)
+
+	fill_page_directory:
+	.set ENTRIES_PER_PD, 512
+	.set SIZEOF_PD_ENTRY, 8
+	.set PAGE_SIZE, 0x200000
+	mov $pd, %edi
+	mov $0x83, %ebx // present, writable, 2 MiB page
+	mov $ENTRIES_PER_PD, %ecx
+	
+	.setEntry:
+	mov %ebx, (%edi)
+	movl $0, 4(%edi)
+	add $PAGE_SIZE, %ebx
+	add $SIZEOF_PD_ENTRY, %edi
+	dec %ecx
+	jnz .setEntry
+
+	.enablePAE:
+	mov %cr4, %eax
+	or $(1 << 5), %eax
+	mov %eax, %cr4
+	mov $pml4, %eax
+	mov %eax, %cr3
+
+	.setLMBit:
+	mov $(0xC0000080), %ecx
+	rdmsr
+	or $(1 << 8), %eax
+	wrmsr
+
+	.enablePaging:
+	.set CR0_PG_ENABLE, (1 << 31)
+	mov %cr0, %eax
+	or $(CR0_PG_ENABLE), %eax
+	mov %eax, %cr0
+
+	.enableLongMode:
+	lgdt .Pointer
+	ljmpl $8, $long_mode_start
+	.code64
+	long_mode_start:
+		mov $stack_top, %rsp
+		mov $0x10, %ax
+		mov %ax, %ds
+		mov %ax, %es
+		mov %ax, %ss
+		call kernel_main // entry point
+1:	hlt // halt infinitely
 	jmp 1b
+
+	// halt if CPUID is not supported
+	no_cpuid:
+2:	hlt
+	jmp 2b
+
+	// halt if long mode is not supported
+	no_long_mode:
+3:	hlt
+	jmp 3b
+
 
 /*
 Set the size of the _start symbol to the current location '.' minus its start.
