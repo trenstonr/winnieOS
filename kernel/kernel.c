@@ -1,8 +1,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <drivers/vga.h>
 
+#include "idt/idt.h"
+
+#include <drivers/vga.h>
 #include <lib/printf.h>
 
 /* Check if the compiler thinks you are targeting the wrong operating system. */
@@ -17,6 +19,10 @@
 void kernel_main(void) 
 {
 	terminal_initialize();
+	idt_init();
+	
+	// test IDT with interrupt 0 (divide by 0 error)
+	__asm__("int $0x0");
 
 	printf("test1: %s, test2: %s,\ntest3: %s !", "abc", "ABC", "Abc");
 }

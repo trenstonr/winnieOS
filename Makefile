@@ -10,7 +10,10 @@ ISODIR 	:= isodir
 OBJS	:= boot/boot.o \
 	   kernel/kernel.o \
 	   drivers/vga.o \
-	   lib/printf.o
+	   lib/printf.o \
+	   kernel/idt/idt_asm.o \
+	   kernel/idt/isr.o \
+	   kernel/idt/idt.o
 
 .PHONY: all iso clean run
 
