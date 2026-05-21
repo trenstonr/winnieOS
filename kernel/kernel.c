@@ -14,6 +14,8 @@
 #error "This kernel needs to be compiled with a x86_64 compiler"
 #endif
 
+#include "gdt/gdt.h" 
+
 void kernel_main(void) 
 {
 	terminal_initialize();

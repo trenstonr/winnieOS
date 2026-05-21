@@ -7,7 +7,12 @@ TARGET 	:= myos
 ISO	:= myos.iso
 ISODIR 	:= isodir
 
-OBJS	:= boot/boot.o kernel/kernel.o drivers/vga.o lib/printf.o
+OBJS	:= boot/boot.o \
+	   kernel/kernel.o \
+	   kernel/gdt/gdt.o \
+	   kernel/gdt/gdt_asm.o \
+	   drivers/vga.o \
+	   lib/printf.o
 
 .PHONY: all iso clean run
 
