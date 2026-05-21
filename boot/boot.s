@@ -1,24 +1,22 @@
-/* Declare constants for the multiboot header. */
-.set ALIGN,    1<<0             /* align loaded modules on page boundaries */
-.set MEMINFO,  1<<1             /* provide memory map */
-.set FLAGS,    ALIGN | MEMINFO  /* this is the Multiboot 'flag' field */
-.set MAGIC,    0x1BADB002       /* 'magic number' lets bootloader find the header */
-.set CHECKSUM, -(MAGIC + FLAGS) /* checksum of above, to prove we are multiboot */
-
-.section .multiboot
-.align 4
-.long MAGIC
-.long FLAGS
-.long CHECKSUM
+.section .multiboot, "a"
+.align 8
+multiboot_start:
+    .long 0xE85250D6           # magic
+    .long 0                    # architecture (i386)
+    .long multiboot_end - multiboot_start   # length
+    .long -(0xE85250D6 + 0 + (multiboot_end - multiboot_start))  # checksum
+    # end tag
+    .word 0    # type
+    .word 0    # flags
+    .long 8    # size
+multiboot_end:
 
 .section .bss
-
 // stack
 .align 16
 stack_bottom:
 .skip 16384 # 16 KiB
 stack_top:
-
 // page tables
 .align 4096
 pml4:
@@ -27,16 +25,31 @@ pdpt:
 .skip 4096
 pd:
 .skip 4096
-pt:
-.skip 4096
+
+.section .rodata
+GDT:
+.Null:
+.quad 0x0000000000000000
+.Code:
+.quad 0x00209A0000000000
+.quad 0x0000920000000000
+.align 4
+.word 0
+.Pointer:
+.word . - GDT - 1
+.long GDT
 
 .section .text
-
 .global _start
 .type _start, @function
+.code32
 _start:
+	cli
+
 	// initalize stack
 	mov $stack_top, %esp
+
+	movl $0x2f4b2f4f, 0xb8000
 
 	// check if CPUID is supported
 	check_cpuid:
@@ -52,6 +65,7 @@ _start:
 	and $(1 << 21), %eax
 	jz no_cpuid
 
+	// check if long mode is supported
 	check_long_mode:
 	mov $0x80000000, %eax
 	cpuid
@@ -62,21 +76,71 @@ _start:
 	test $(1 << 29), %edx
 	jz no_long_mode
 
-	// entry point
-	call kernel_main
+	link_page_table:
+	mov $pdpt + 3, %eax // set first 2 bits (+ 3)
+	movl %eax, (pml4)
+	mov $pd + 3, %eax
+	movl %eax, (pdpt)
 
+	fill_page_directory:
+	.set ENTRIES_PER_PD, 512
+	.set SIZEOF_PD_ENTRY, 8
+	.set PAGE_SIZE, 0x200000
+	mov $pd, %edi
+	mov $0x83, %ebx // present, writable, 2 MiB page
+	mov $ENTRIES_PER_PD, %ecx
+	
+	.setEntry:
+	mov %ebx, (%edi)
+	movl $0, 4(%edi)
+	add $PAGE_SIZE, %ebx
+	add $SIZEOF_PD_ENTRY, %edi
+	dec %ecx
+	jnz .setEntry
+
+	.enablePAE:
+	mov %cr4, %eax
+	or $(1 << 5), %eax
+	mov %eax, %cr4
+	mov $pml4, %eax
+	mov %eax, %cr3
+
+	.setLMBit:
+	mov $(0xC0000080), %ecx
+	rdmsr
+	or $(1 << 8), %eax
+	wrmsr
+
+	.enablePaging:
+	.set CR0_PG_ENABLE, (1 << 31)
+	mov %cr0, %eax
+	or $(CR0_PG_ENABLE), %eax
+	mov %eax, %cr0
+
+	.enableLongMode:
+	lgdt .Pointer
+	ljmpl $8, $long_mode_start
+	.code64
+	long_mode_start:
+		mov $stack_top, %rsp
+		mov $0x10, %ax
+		mov %ax, %ds
+		mov %ax, %es
+		mov %ax, %ss
+		call kernel_main // entry point
+1:	hlt // halt infinitely
+	jmp 1b
+
+	// halt if CPUID is not supported
 	no_cpuid:
 2:	hlt
 	jmp 2b
 
+	// halt if long mode is not supported
 	no_long_mode:
 3:	hlt
 	jmp 3b
 
-
-	// put cpu in infinite loop (kernel should never return)
-1:	hlt
-	jmp 1b
 
 /*
 Set the size of the _start symbol to the current location '.' minus its start.
