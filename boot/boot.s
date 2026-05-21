@@ -11,24 +11,15 @@ multiboot_start:
     .long 8    # size
 multiboot_end:
 
-/*
-The multiboot standard does not define the value of the stack pointer register
-(esp) and it is up to the kernel to provide a stack. This allocates room for a
-small stack by creating a symbol at the bottom of it, then allocating 16384
-bytes for it, and finally creating a symbol at the top. The stack grows
-downwards on x86. The stack is in its own section so it can be marked nobits,
-which means the kernel file is smaller because it does not contain an
-uninitialized stack. The stack on x86 must be 16-byte aligned according to the
-System V ABI standard and de-facto extensions. The compiler will assume the
-stack is properly aligned and failure to align the stack will result in
-undefined behavior.
-*/
+
 .section .bss
+
 // stack
 .align 16
 stack_bottom:
 .skip 16384 # 16 KiB
 stack_top:
+
 // page tables
 .align 4096
 pml4:
@@ -38,7 +29,9 @@ pdpt:
 pd:
 .skip 4096
 
+
 .section .rodata
+
 GDT:
 .Null:
 .quad 0x0000000000000000
@@ -51,7 +44,9 @@ GDT:
 .word . - GDT - 1
 .long GDT
 
+
 .section .text
+
 .global _start
 .type _start, @function
 .code32

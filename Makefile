@@ -9,8 +9,6 @@ ISODIR 	:= isodir
 
 OBJS	:= boot/boot.o \
 	   kernel/kernel.o \
-	   kernel/gdt/gdt.o \
-	   kernel/gdt/gdt_asm.o \
 	   drivers/vga.o \
 	   lib/printf.o
 
