@@ -1,8 +1,9 @@
-#include "ppm.h"
+#include <stdint.h>
 #include <stddef.h>
 #include <lib/printf.h>
+#include "pmm.h"
 
-extern char kernel_end;
+extern char kernel_end[];
 
 typedef struct {
 	uint32_t type;
@@ -24,13 +25,16 @@ typedef struct {
 	MemoryMapEntry entries[];
 } MemoryMap;
 
-void ppm_init(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
+static uint64_t bitmap_size;
+static uint8_t *bitmap;	
+
+void pmm_init(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
 	if (multiboot_magic != 0x36d76289) {
 		printf("\nOS loaded by a non-Multiboot2-compliant boot loader.");
 		return;
 	}
 	
-	GenericTag *tag = (GenericTag *)(multiboot_info_addr + 8);
+	GenericTag *tag = (GenericTag *)(uintptr_t)(multiboot_info_addr + 8);
 	while (tag->type != 6) {
 		if (tag->type == 0) {
 			printf("\nMemory map tag not found in multiboot info struct");
@@ -53,8 +57,9 @@ void ppm_init(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
 		}	
 	}
 
-	uint64_t bitmap_size = max_addr / (4096 * 8); // 4 KB physical frames
-	uint8_t *bitmap = (uint8_t *)&kernel_end;
+	uint64_t num_frames = max_addr / 4096; // 4 KB physical frames
+	bitmap_size = (num_frames + 7) / 8;    // ceil-divide: round up so the top frames aren't dropped
+	bitmap = (uint8_t *)&kernel_end;
 	
 	// assume all entries are reserved
 	for (size_t i = 0; i < bitmap_size; i++) {
@@ -72,6 +77,11 @@ void ppm_init(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
 			}
 		}	
 	}
+
+	// mark first 2MiB as reserved
+	for (uint64_t frame = 0; frame < 0x200000 / 4096; frame++) {
+		bitmap[frame / 8] |= 1 << (frame % 8);
+	}
 	
 	// mark kernel frames as reserved
 	uint64_t kernel_start_frame = 0x200000 / 4096;
@@ -85,4 +95,27 @@ void ppm_init(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
 	for (uint64_t frame = kernel_end_frame; frame < bitmap_end_frame; frame++) {
 		bitmap[frame / 8] |= 1 << (frame % 8);
 	}
+}
+
+uint64_t pmm_alloc_frame(void) {
+	for (size_t i = 0; i < bitmap_size; i++) {
+		if (bitmap[i] == 0xFF) continue;
+		for (size_t j = 0; j < 8; j++) {
+			if ((bitmap[i] >> j) & 1) continue;
+			bitmap[i] |= 1 << j;
+			return ((i * 8) + j) * 4096;
+		}
+	}
+
+	return 0;
+}
+
+// uint8_t bitmap[]
+// MSB.......LSB ....x.. ........ ........
+// frame = 10
+// bitmap[frame/8], bit (frame % 8)
+
+void pmm_free_frame(uint64_t addr) {
+	uint64_t frame = addr / 4096;
+	bitmap[frame / 8] &= ~(1 << (frame % 8));
 }
