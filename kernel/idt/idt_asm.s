@@ -48,6 +48,7 @@ unhandled_interrupt:
 	save_registers
 	call handle_interrupt
 	restore_registers
+	addq $8, %rsp		/* discard error code so rsp points at saved RIP */
 	iretq
 
 .global isr0
@@ -56,6 +57,7 @@ isr0:
 	save_registers
 	call handle_divide_error
 	restore_registers
+	addq $8, %rsp		
 	iretq
 
 .global isr8
@@ -63,6 +65,7 @@ isr8:
 	save_registers
 	call handle_double_fault
 	restore_registers
+	addq $8, %rsp	
 	iretq
 
 .global isr13
@@ -70,6 +73,7 @@ isr13:
 	save_registers
 	call handle_generic_protection_fault
 	restore_registers
+	addq $8, %rsp
 	iretq
 
 .global isr14
@@ -77,6 +81,7 @@ isr14:
 	save_registers
 	call handle_page_fault
 	restore_registers
+	addq $8, %rsp	
 	iretq
 	
 	

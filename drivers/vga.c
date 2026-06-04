@@ -38,7 +38,7 @@ void terminal_putentryat(char c, uint8_t color, size_t x, size_t y)
 	terminal_buffer[index] = vga_entry(c, color);
 }
 
-char terminal_getentry(size_t x, size_t y) {
+uint16_t terminal_getentry(size_t x, size_t y) {
 	const size_t index = y * VGA_WIDTH + x;
 	return terminal_buffer[index];
 }
@@ -46,8 +46,8 @@ char terminal_getentry(size_t x, size_t y) {
 void scroll() {
 	for (int row = 1; row < VGA_HEIGHT; row++) {
 		for (int col = 0; col < VGA_WIDTH; col++) {
-			char copy = terminal_getentry(col, row);
-			terminal_putentryat(copy, terminal_color, col, row - 1);
+			uint16_t copy = terminal_getentry(col, row);	// full cell: char + color
+			terminal_buffer[(row - 1) * VGA_WIDTH + col] = copy;
 		}
 	}
 

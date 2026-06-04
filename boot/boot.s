@@ -5,10 +5,20 @@ multiboot_start:
     .long 0                    # architecture (i386)
     .long multiboot_end - multiboot_start   # length
     .long -(0xE85250D6 + 0 + (multiboot_end - multiboot_start))  # checksum
-    # end tag
-    .word 0    # type
-    .word 0    # flags
-    .long 8    # size
+
+    # request tag
+    .align 8
+    .word 1	# type
+    .word 0	# flags
+    .long 12	# size
+    .long 6	# arr of tags to request (currently only mmap)	
+    
+    # end tag (terminator)
+    .align 8	
+    .word 0	# type
+    .word 0	# flags
+    .long 8	# size
+
 multiboot_end:
 
 
@@ -45,6 +55,17 @@ GDT:
 .long GDT
 
 
+.section .data
+
+.global multiboot_magic
+multiboot_magic:
+	.long 0
+
+.global multiboot_info_addr
+multiboot_info_addr:
+	.long 0
+
+
 .section .text
 
 .global _start
@@ -55,8 +76,10 @@ _start:
 
 	// initalize stack
 	mov $stack_top, %esp
-
-	movl $0x2f4b2f4f, 0xb8000
+	
+	// set multiboot info variables
+	mov %eax, multiboot_magic
+	mov %ebx, multiboot_info_addr
 
 	// check if CPUID is supported
 	check_cpuid:
@@ -129,12 +152,20 @@ _start:
 	ljmpl $8, $long_mode_start
 	.code64
 	long_mode_start:
+		// reload stack/segment pointers/registers
 		mov $stack_top, %rsp
 		mov $0x10, %ax
 		mov %ax, %ds
 		mov %ax, %es
 		mov %ax, %ss
-		call kernel_main // entry point
+		
+		// pass multiboot info into entry point
+		movl multiboot_magic, %edi
+		movl multiboot_info_addr, %esi
+
+		// call entry point
+		call kernel_main
+
 1:	hlt // halt infinitely
 	jmp 1b
 
