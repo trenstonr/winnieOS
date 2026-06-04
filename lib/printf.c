@@ -1,3 +1,5 @@
+#include <stdint.h>
+#include <stddef.h>
 #include <lib/printf.h>
 #include <drivers/vga.h>
 
@@ -23,8 +25,17 @@ void printf(const char *args, ...) {
 					arg++;
 				}
 			}
-			else if (*str == 'd') {
-				// skip for now
+			else if (str[0] == 'l' && str[1] == 'l' && str[2] == 'x') {
+				// 64-bit hex  
+				uint64_t arg = va_arg(ap, uint64_t);
+				for (size_t i = 1; i <= 16; i++) {
+					uint64_t nibble = (arg >> (64 - (i * 4))) & 0xF;
+					char digit;
+					if (nibble <= 9) digit = '0' + nibble;
+					else digit = 'a' + (nibble - 10);
+					terminal_putchar(digit, VGA_COLOR_BLUE);
+				}
+				str += 2;
 			}
 			
 			str++;
