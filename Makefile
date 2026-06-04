@@ -13,7 +13,8 @@ OBJS	:= boot/boot.o \
 	   lib/printf.o \
 	   kernel/idt/idt_asm.o \
 	   kernel/idt/isr.o \
-	   kernel/idt/idt.o
+	   kernel/idt/idt.o \
+	   kernel/pmm/pmm.o
 
 .PHONY: all iso clean run
 

@@ -17,6 +17,7 @@ void printf(const char *args, ...) {
 	while (*str != '\0') {
 		while (*str != '\0' && *str == '%') {
 			str++;
+			if (*str == '\0') break; // trailing '%' with no format char — stop before walking past the null
 
 			if (*str == 's') {
 				const char *arg = va_arg(ap, const char *);
@@ -26,14 +27,16 @@ void printf(const char *args, ...) {
 				}
 			}
 			else if (str[0] == 'l' && str[1] == 'l' && str[2] == 'x') {
-				// 64-bit hex  
+				// 64-bit hex
+				terminal_putchar('0', VGA_COLOR_LIGHT_BLUE);
+				terminal_putchar('x', VGA_COLOR_LIGHT_BLUE);
 				uint64_t arg = va_arg(ap, uint64_t);
 				for (size_t i = 1; i <= 16; i++) {
 					uint64_t nibble = (arg >> (64 - (i * 4))) & 0xF;
 					char digit;
 					if (nibble <= 9) digit = '0' + nibble;
 					else digit = 'a' + (nibble - 10);
-					terminal_putchar(digit, VGA_COLOR_BLUE);
+					terminal_putchar(digit, VGA_COLOR_LIGHT_BLUE);
 				}
 				str += 2;
 			}

@@ -160,8 +160,8 @@ _start:
 		mov %ax, %ss
 		
 		// pass multiboot info into entry point
-		mov multiboot_magic, %rdi
-		mov multiboot_info_addr, %rsi
+		movl multiboot_magic, %edi
+		movl multiboot_info_addr, %esi
 
 		// call entry point
 		call kernel_main
