@@ -1,6 +1,6 @@
 CC	:= x86_64-elf-gcc
 AS	:= x86_64-elf-as
-CFLAGS	:= -std=gnu99 -ffreestanding -O2 -Wall -Wextra -mno-red-zone -mgeneral-regs-only -mno-sse -mno-sse2 -mno-mmx -mno-80387 -I include/
+CFLAGS	:= -std=gnu99 -ffreestanding -O2 -Wall -Wextra -mcmodel=kernel -mno-red-zone -mgeneral-regs-only -mno-sse -mno-sse2 -mno-mmx -mno-80387 -I include/
 LFLAGS := -ffreestanding -O2 -nostdlib -lgcc -Wl,-z,max-page-size=0x1000
 
 TARGET 	:= myos

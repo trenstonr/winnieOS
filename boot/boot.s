@@ -11,15 +11,23 @@ multiboot_start:
     .word 1	# type
     .word 0	# flags
     .long 12	# size
-    .long 6	# arr of tags to request (currently only mmap)	
-    
+    .long 6	# arr of tags to request (currently only mmap)
+
     # end tag (terminator)
-    .align 8	
+    .align 8
     .word 0	# type
     .word 0	# flags
     .long 8	# size
 
 multiboot_end:
+
+
+# The whole image is now LINKED HIGH (VMA = 0xFFFFFFFF80200000) but LOADED LOW
+# (LMA = 0x200000). So every symbol's value is a high virtual address. The 32-bit
+# pre-paging code below runs with paging OFF, addressing physical memory, in 32-bit
+# registers. A high 64-bit symbol can't be used there. Subtracting KERNEL_VMA turns
+# any high symbol back into its physical address, which fits in 32 bits.
+.set KERNEL_VMA, 0xFFFFFFFF80000000
 
 
 .section .bss
@@ -52,7 +60,8 @@ GDT:
 .word 0
 .Pointer:
 .word . - GDT - 1
-.long GDT
+.long GDT - KERNEL_VMA          # base must be the PHYSICAL address of GDT: lgdt runs
+                                # in 32-bit mode, so this .long has to hold a 32-bit value
 
 
 .section .data
@@ -74,12 +83,12 @@ multiboot_info_addr:
 _start:
 	cli
 
-	// initalize stack
-	mov $stack_top, %esp
-	
-	// set multiboot info variables
-	mov %eax, multiboot_magic
-	mov %ebx, multiboot_info_addr
+	// initalize stack (physical address: still in 32-bit mode, paging off)
+	mov $(stack_top - KERNEL_VMA), %esp
+
+	// set multiboot info variables (store to their physical addresses)
+	mov %eax, (multiboot_magic - KERNEL_VMA)
+	mov %ebx, (multiboot_info_addr - KERNEL_VMA)
 
 	// check if CPUID is supported
 	check_cpuid:
@@ -107,19 +116,26 @@ _start:
 	jz no_long_mode
 
 	link_page_table:
-	mov $pdpt + 3, %eax // set first 2 bits (+ 3)
-	movl %eax, (pml4)
-	mov $pd + 3, %eax
-	movl %eax, (pdpt)
+	// pdpt+3 (present|writable) goes into BOTH pml4[0] (low identity map)
+	// and pml4[511] (high half). 511*8 = byte offset of entry 511.
+	mov $(pdpt - KERNEL_VMA + 3), %eax
+	movl %eax, (pml4 - KERNEL_VMA)              // pml4[0]   -> pdpt  (low)
+	movl %eax, (pml4 - KERNEL_VMA + 511*8)      // pml4[511] -> pdpt  (high)
+
+	// pd+3 goes into BOTH pdpt[0] (low) and pdpt[510] (high).
+	// 0xFFFFFFFF80000000 decodes to pml4 index 511, pdpt index 510, pd index 0.
+	mov $(pd - KERNEL_VMA + 3), %eax
+	movl %eax, (pdpt - KERNEL_VMA)              // pdpt[0]   -> pd    (low)
+	movl %eax, (pdpt - KERNEL_VMA + 510*8)      // pdpt[510] -> pd    (high)
 
 	fill_page_directory:
 	.set ENTRIES_PER_PD, 512
 	.set SIZEOF_PD_ENTRY, 8
 	.set PAGE_SIZE, 0x200000
-	mov $pd, %edi
+	mov $(pd - KERNEL_VMA), %edi
 	mov $0x83, %ebx // present, writable, 2 MiB page
 	mov $ENTRIES_PER_PD, %ecx
-	
+
 	.setEntry:
 	mov %ebx, (%edi)
 	movl $0, 4(%edi)
@@ -132,7 +148,7 @@ _start:
 	mov %cr4, %eax
 	or $(1 << 5), %eax
 	mov %eax, %cr4
-	mov $pml4, %eax
+	mov $(pml4 - KERNEL_VMA), %eax   // CR3 takes the PHYSICAL address of the PML4
 	mov %eax, %cr3
 
 	.setLMBit:
@@ -146,22 +162,36 @@ _start:
 	mov %cr0, %eax
 	or $(CR0_PG_ENABLE), %eax
 	mov %eax, %cr0
+	// paging is now ON. Both the low identity map and the high map are live.
 
 	.enableLongMode:
-	lgdt .Pointer
-	ljmpl $8, $long_mode_start
+	lgdt (.Pointer - KERNEL_VMA)             // GDTR loaded from physical addr of .Pointer
+	// Far jump reloads CS and enters 64-bit mode. A 32-bit far jump encodes a
+	// 32-bit offset, so we MUST target the LOW physical address of the entry.
+	ljmpl $8, $(long_mode_entry - KERNEL_VMA)
+
 	.code64
-	long_mode_start:
-		// reload stack/segment pointers/registers
+	long_mode_entry:
+		// Still executing at the LOW address here (RIP is low). A near jmp is
+		// RIP-relative and would keep us low forever. To reach the high half we
+		// load the full 64-bit high address and do an ABSOLUTE indirect jump.
+		movabs $higher_half_start, %rax
+		jmp *%rax
+
+	higher_half_start:
+		// RIP is now HIGH. From here every kernel symbol is reachable RIP-relative,
+		// so no more KERNEL_VMA subtraction is needed.
+
+		// reload stack to the high virtual stack, and the segment registers
 		mov $stack_top, %rsp
 		mov $0x10, %ax
 		mov %ax, %ds
 		mov %ax, %es
 		mov %ax, %ss
-		
-		// pass multiboot info into entry point
-		movl multiboot_magic, %edi
-		movl multiboot_info_addr, %esi
+
+		// pass multiboot info into entry point (SysV: rdi, rsi)
+		mov multiboot_magic, %edi
+		mov multiboot_info_addr, %esi
 
 		// call entry point
 		call kernel_main

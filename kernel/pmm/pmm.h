@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define KERNEL_VMA 0xFFFFFFFF80000000UL
+
 void pmm_init(uint32_t multiboot_magic, uint32_t multiboot_info_addr);
 
 uint64_t pmm_alloc_frame(void);
