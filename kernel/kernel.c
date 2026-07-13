@@ -44,6 +44,7 @@ void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_addr)
 	*mem = 0xCAFEBABE;
 
 	printf("\n\nVMM TEST: (va)%llx (pa)%llx", *mem, *(uint64_t *)x);
+	printf("\nva2pa TEST: (mapped)%llx (not mapped)%llx", va2pa(pml4, va), va2pa(pml4, 0x50000000));
 
 	// printf tests
 	printf("\n\nPRINTF TEST: s: %s, llx: %llx", "Winnie", 0xdeadbeef12340987);
