@@ -85,7 +85,34 @@ void terminal_write(const char* data, size_t size, enum vga_color color)
 		terminal_putchar(data[i], color);
 }
 
-void terminal_writestring(const char* data, enum vga_color color) 
+void terminal_writestring(const char* data, enum vga_color color)
 {
 	terminal_write(data, strlen(data), color);
+}
+
+void terminal_writehex(uint64_t value, enum vga_color color)
+{
+	terminal_writestring("0x", color);
+
+	int started = 0;
+	for (int i = 15; i >= 0; i--) {
+		uint64_t nibble = (value >> (i * 4)) & 0xF;
+		if (nibble == 0 && !started && i > 0)
+			continue;	// skip leading zeros
+		started = 1;
+		terminal_putchar(nibble < 10 ? '0' + nibble : 'a' + (nibble - 10), color);
+	}
+}
+
+void terminal_writedec(uint64_t value, enum vga_color color)
+{
+	char buf[20];
+	int i = 0;
+	do {
+		buf[i++] = '0' + (value % 10);
+		value /= 10;
+	} while (value > 0);
+
+	while (i > 0)
+		terminal_putchar(buf[--i], color);
 }
