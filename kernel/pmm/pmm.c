@@ -85,13 +85,13 @@ void pmm_init(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
 	
 	// mark kernel frames as reserved
 	uint64_t kernel_start_frame = 0x200000 / 4096;
-	uintptr_t kernel_end_frame = (uintptr_t)&kernel_end / 4096;
+	uintptr_t kernel_end_frame = ((uintptr_t)&kernel_end - KERNEL_VMA) / 4096;
 	for (uint64_t frame = kernel_start_frame; frame < kernel_end_frame; frame++) {
 		bitmap[frame / 8] |= 1 << (frame % 8);
 	}
 
 	// mark bitmap's own frames as reserved
-	uintptr_t bitmap_end_frame = ((uintptr_t)&kernel_end + bitmap_size) / 4096;
+	uintptr_t bitmap_end_frame = ((uintptr_t)&kernel_end + bitmap_size - KERNEL_VMA) / 4096;
 	for (uint64_t frame = kernel_end_frame; frame < bitmap_end_frame; frame++) {
 		bitmap[frame / 8] |= 1 << (frame % 8);
 	}

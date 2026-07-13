@@ -4,6 +4,7 @@
 
 #include "idt/idt.h"
 #include "pmm/pmm.h"
+#include "vmm/vmm.h"
 
 #include <drivers/vga.h>
 #include <lib/printf.h>
@@ -28,9 +29,25 @@ void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_addr)
 
 	// test PMM
 	uint64_t a = pmm_alloc_frame(), b = pmm_alloc_frame(), c = pmm_alloc_frame();
-	printf("%llx %llx %llx", a, b, c);
+	printf("PMM TEST: %llx %llx %llx", a, b, c);
 
+	// test VMM
+	uint64_t cr3;
+	__asm__ volatile ("mov %%cr3, %0" : "=r"(cr3));
+	
+	uint64_t *pml4 = (uint64_t *)BASE(cr3);
+	uint64_t va = 0x40000000;
+	uint64_t x = pmm_alloc_frame();
+	map_page(pml4, va, x, 0x3);
+
+	uint64_t *mem = (uint64_t *)va;
+	*mem = 0xCAFEBABE;
+
+	unmap_page(pml4, va);
+	printf("\n\nVMM TEST: (va)%llx (pa)%llx", *mem, *(uint64_t *)x);
+	printf("\nva2pa TEST: (mapped)%llx (not mapped)%llx", va2pa(pml4, va), va2pa(pml4, 0x50000000));
+	
 	// printf tests
-	printf("\n\ns: %s, llx: %llx", "Winnie", 0xdeadbeef12340987);
+	printf("\n\nPRINTF TEST: s: %s, llx: %llx", "Winnie", 0xdeadbeef12340987);
 
 }
