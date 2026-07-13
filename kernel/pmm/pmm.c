@@ -26,7 +26,7 @@ typedef struct {
 } MemoryMap;
 
 static uint64_t bitmap_size;
-static uint8_t *bitmap;	
+static uint8_t *bitmap;
 
 void pmm_init(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
 	if (multiboot_magic != 0x36d76289) {
@@ -118,4 +118,12 @@ uint64_t pmm_alloc_frame(void) {
 void pmm_free_frame(uint64_t addr) {
 	uint64_t frame = addr / 4096;
 	bitmap[frame / 8] &= ~(1 << (frame % 8));
+}
+
+uint64_t pmm_free_count(void) {
+	uint64_t count = 0;
+	for (size_t i = 0; i < bitmap_size; i++)
+		for (int j = 0; j < 8; j++)
+			if (!((bitmap[i] >> j) & 1)) count++;
+	return count;
 }
