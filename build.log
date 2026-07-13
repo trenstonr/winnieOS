@@ -1,8 +1,0 @@
-x86_64-elf-as boot/boot.s -o boot/boot.o
-x86_64-elf-gcc -std=gnu99 -ffreestanding -O2 -Wall -Wextra -mno-red-zone -mgeneral-regs-only -mno-sse -mno-sse2 -mno-mmx -mno-80387 -I include/ -c kernel/kernel.c -o kernel/kernel.o
-x86_64-elf-gcc -std=gnu99 -ffreestanding -O2 -Wall -Wextra -mno-red-zone -mgeneral-regs-only -mno-sse -mno-sse2 -mno-mmx -mno-80387 -I include/ -c drivers/vga.c -o drivers/vga.o
-x86_64-elf-gcc -std=gnu99 -ffreestanding -O2 -Wall -Wextra -mno-red-zone -mgeneral-regs-only -mno-sse -mno-sse2 -mno-mmx -mno-80387 -I include/ -c lib/printf.c -o lib/printf.o
-x86_64-elf-as kernel/idt/idt_asm.s -o kernel/idt/idt_asm.o
-x86_64-elf-gcc -std=gnu99 -ffreestanding -O2 -Wall -Wextra -mno-red-zone -mgeneral-regs-only -mno-sse -mno-sse2 -mno-mmx -mno-80387 -I include/ -c kernel/idt/isr.c -o kernel/idt/isr.o
-x86_64-elf-gcc -std=gnu99 -ffreestanding -O2 -Wall -Wextra -mno-red-zone -mgeneral-regs-only -mno-sse -mno-sse2 -mno-mmx -mno-80387 -I include/ -c kernel/idt/idt.c -o kernel/idt/idt.o
-x86_64-elf-gcc -ffreestanding -O2 -nostdlib -lgcc -Wl,-z,max-page-size=0x1000 -T linker.ld boot/boot.o kernel/kernel.o drivers/vga.o lib/printf.o kernel/idt/idt_asm.o kernel/idt/isr.o kernel/idt/idt.o -o myos
