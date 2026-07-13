@@ -14,7 +14,8 @@ OBJS	:= boot/boot.o \
 	   kernel/idt/idt_asm.o \
 	   kernel/idt/isr.o \
 	   kernel/idt/idt.o \
-	   kernel/pmm/pmm.o
+	   kernel/pmm/pmm.o \
+	   kernel/vmm/vmm.o
 
 .PHONY: all iso clean run
 
