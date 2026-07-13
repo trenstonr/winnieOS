@@ -38,6 +38,30 @@ void map_page(uint64_t *pml4, uint64_t va, uint64_t pa, uint64_t flags) {
 	*entry = pa | flags | 0x1;
 }
 
+void unmap_page(uint64_t *pml4, uint64_t va) {
+	uint64_t *entry;
+
+	// pml4 entry
+	entry = &pml4[PML4_IDX(va)];
+	if (!(*entry & 0x1)) return; 
+
+	// pdpt entry
+	entry = &((uint64_t *)BASE(*entry))[PDPT_IDX(va)];
+	if (!(*entry & 0x1)) return;
+
+	// pd entry
+	entry = &((uint64_t *)BASE(*entry))[PD_IDX(va)];
+	if (!(*entry & 0x1)) return; 
+
+	// pt entry
+	entry = &((uint64_t *)BASE(*entry))[PT_IDX(va)];
+	if (!(*entry & 0x1)) return;
+
+	*entry = 0; 
+	__asm__ volatile ("invlpg (%0)" : : "r"(va) : "memory");	// crazy wacky assembly
+
+}
+
 uint64_t va2pa(uint64_t *pml4, uint64_t va) {
 	uint64_t *entry;
 
@@ -59,6 +83,3 @@ uint64_t va2pa(uint64_t *pml4, uint64_t va) {
 
 	return BASE(*entry) | (va & 0xFFF);
 }
-
-
-
