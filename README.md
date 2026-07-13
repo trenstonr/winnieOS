@@ -1,61 +1,142 @@
 # winnieOS
 
 A 64-bit operating system kernel for x86-64, written from scratch in C and
-assembly. It's a freestanding kernel: no libc, no runtime, and essentially no
-borrowed kernel code, apart from a small amount of VGA driver code adapted from
-the OSDev [Bare Bones](https://wiki.osdev.org/Bare_Bones) tutorial. GRUB loads
-the binary, and the kernel does everything after that itself: switching the CPU
-into 64-bit long mode, building page tables by hand, taking interrupts, and
-managing physical and virtual memory. That covers most of the genuinely hard
-parts of early kernel bring-up, in a codebase small enough to read in one
-sitting.
+assembly.
 
-The kernel tests itself as it boots and prints the results, so the boot screen
-is a live demo of what works.
+GRUB loads the binary. Everything after that is code in this repo: the switch
+into 64-bit long mode, the page tables, the interrupt handlers, and the memory
+allocators. The kernel is freestanding, with no libc and no runtime. 
 
-**GRUB boot menu with the winnieOS entry:**
+## What happens on boot
 
-<img width="776" height="519" alt="GRUB boot menu showing the winnieOS entry" src="https://github.com/user-attachments/assets/6f731f71-6d58-4ec6-8791-173bea26f162" />
+The kernel runs a self-test suite every time it boots and prints the results
+through its own VGA text driver, so the boot screen is a live readout of which
+subsystems work. This is the actual QEMU output:
 
-**Actual `kernel.c` self-test output in QEMU:**
+<img width="774" height="512" alt="winnieOS kernel self-test output in QEMU" src="https://github.com/user-attachments/assets/21abf2b2-79ef-4197-92ef-74e34530b26d" />
 
-<img width="776" height="519" alt="winnieOS kernel self-test output in QEMU" src="https://github.com/user-attachments/assets/f18d186d-3072-4951-a891-808e4ce39ae3" />
+Reading it top to bottom:
+
+- The `[ OK ]` lines are printed by [`kernel_main`](kernel/kernel.c) as each
+  subsystem initializes: long mode, the interrupt descriptor table, the
+  physical allocator, paging.
+- `self-test: physical memory` allocates three frames, checks they're
+  distinct, frees one, and checks the allocator hands the same frame back.
+- `self-test: virtual memory` maps a fresh page, writes through the virtual
+  address, and reads the value back through the physical one. If those don't
+  match, paging is broken. Then it unmaps and confirms the translation is
+  gone.
+- The status bar reports free memory (as tracked by the physical allocator)
+  and the overall pass/fail result.
+
+Both tests live in [`kernel/selftest/selftest.c`](kernel/selftest/selftest.c).
+The physical memory test:
+
+```c
+uint64_t a = pmm_alloc_frame(), b = pmm_alloc_frame(), c = pmm_alloc_frame();
+expect(a && b && c && a != b && b != c, "distinct frames", "BAD FRAMES");
+// three allocations should return three different non-null frames
+
+pmm_free_frame(b);
+uint64_t r = pmm_alloc_frame();
+expect(r == b, "freed frame reclaimed", "NOT RECLAIMED");
+// freeing b and allocating again should reclaim that same frame
+```
+
+And the core of the virtual memory test:
+
+```c
+map_page(pml4, va, pa, 0x3);              /// P|W
+// map va to pa, so the two addresses point at the same physical frame
+
+*(volatile uint64_t *)va = 0xCAFEBABE;    // write to the virtual address
+expect(*(volatile uint64_t *)pa == 0xCAFEBABE, "same frame", "NO ALIAS");
+// reading back through the physical address should see the same value
+
+unmap_page(pml4, va);
+expect(va2pa(pml4, va) == (uint64_t)-1, "translation gone", "STILL MAPPED");
+// after unmapping, the translation should no longer exist
+```
+
+The test page lives at 1 GiB, outside the boot-time identity map, so it can
+only work if `map_page` actually built the intermediate page tables.
 
 ## What's implemented
 
 | Subsystem | Code | Notes |
 |-----------|------|-------|
-| Boot / long mode | [`boot/boot.s`](boot/boot.s) | CPUID + long mode checks, page tables built by hand, PAE, `EFER.LME`, 64-bit GDT, far jump into 64-bit mode. Boots via Multiboot2 (originally Multiboot, from the Bare Bones tutorial, since migrated) |
-| Higher-half kernel | [`boot.s`](boot/boot.s) + [`linker.ld`](linker.ld) | linked at `0xFFFFFFFF80200000`, loaded at `0x200000` |
-| Interrupts | [`kernel/idt/`](kernel/idt/) | 256-entry IDT with hand-encoded 16-byte gates; handlers for Divide Error (#DE), Double Fault (#DF), General Protection Fault (#GP), and Page Fault (#PF); the page fault handler prints the faulting address from `CR2` |
+| Boot / long mode | [`boot/boot.s`](boot/boot.s) | Multiboot2 entry, CPUID and long mode checks, page tables built by hand, far jump into 64-bit mode |
+| Higher-half kernel | [`boot/boot.s`](boot/boot.s) + [`linker.ld`](linker.ld) | linked at `0xFFFFFFFF80200000`, loaded at physical `0x200000` |
+| Interrupts | [`kernel/idt/`](kernel/idt/) | 256-entry interrupt descriptor table, gates encoded byte by byte; handlers for Divide Error, Double Fault, General Protection Fault, and Page Fault |
 | Physical memory | [`kernel/pmm/pmm.c`](kernel/pmm/pmm.c) | bitmap allocator, one bit per 4 KiB frame, built from the Multiboot2 memory map |
-| Virtual memory | [`kernel/vmm/vmm.c`](kernel/vmm/vmm.c) | 4-level page-table walker: `map_page`, `unmap_page`, `va2pa`; allocates intermediate tables on demand, flushes the TLB with the `invlpg` instruction on unmap |
-| Console | [`drivers/vga.c`](drivers/vga.c), [`lib/printf.c`](lib/printf.c) | VGA text driver with scrolling (parts adapted from the OSDev Bare Bones tutorial), freestanding printf |
+| Virtual memory | [`kernel/vmm/vmm.c`](kernel/vmm/vmm.c) | walks the 4-level page tables: `map_page`, `unmap_page`, `va2pa` |
+| Console | [`drivers/vga.c`](drivers/vga.c), [`lib/printf.c`](lib/printf.c) | VGA text driver with scrolling (partly from Bare Bones), freestanding printf |
 
-## The hard part: getting into long mode
+## From GRUB to long mode
 
-GRUB hands off in 32-bit protected mode with paging off, and the kernel wants
-to run as 64-bit code at the top of the address space. [`boot/boot.s`](boot/boot.s)
-gets there in four steps:
+GRUB hands off in 32-bit protected mode with paging disabled. winnieOS is a
+higher-half kernel: it runs as 64-bit code mapped at the top of the virtual
+address space, at `0xFFFFFFFF80200000`. [`boot/boot.s`](boot/boot.s) bridges
+that gap in four steps:
 
-1. Confirm `CPUID` works and long mode is supported.
-2. Build page tables that map the first 1 GiB twice: once identity-mapped (so
-   the next instruction still exists the moment paging turns on) and once at
+1. Confirm the `CPUID` instruction works and the CPU supports long mode.
+2. Build page tables that map the first 1 GiB twice: identity-mapped, so the
+   next instruction still exists the moment paging turns on, and again at
    `0xFFFFFFFF80000000`.
-3. Enable PAE, load `CR3`, set `EFER.LME`, enable paging, load a 64-bit GDT,
-   and far-jump to reload `CS` into 64-bit mode.
-4. Jump to the high address. This has to be an absolute indirect jump, because
-   a normal jump is RIP-relative and would leave execution at the low address
-   forever.
+3. Enable PAE (Physical Address Extension), load the page tables into `CR3`,
+   set the long mode enable bit in the `EFER` register, enable paging, load a
+   64-bit GDT (Global Descriptor Table), and far-jump to reload `CS` into
+   64-bit mode.
+4. Jump to the high mapping. A normal jump is relative to the instruction
+   pointer and would keep executing at the low address, so this one is an
+   absolute jump through a register:
 
-The higher-half layout is the same split Linux uses: the kernel stays mapped at
-the top of every address space, leaving the entire lower half for user programs
-(userspace isn't implemented yet).
+```asm
+.code64                                # assembler directive: everything below is 64-bit code
+long_mode_entry:
+    movabs $higher_half_start, %rax    # load the full 64-bit high address into a register
+    jmp *%rax                          # absolute jump to it
+
+higher_half_start:
+    mov $stack_top, %rsp               # execution is now in the higher half;
+                                       # switch to the high virtual stack
+```
+
+This is the same higher-half split Linux uses: the kernel stays mapped at the
+top of every address space, and the lower half is left for user programs
+(userspace isn't implemented yet, see the roadmap).
+
+## Interrupts
+
+When an exception fires, the CPU uses its vector number to index the interrupt
+descriptor table and jumps through the matching gate to a handler. winnieOS
+installs a full 256-entry table: vectors 0, 8, 13, and 14 (Divide Error,
+Double Fault, General Protection Fault, and Page Fault) get dedicated
+handlers, and every other vector routes to a catch-all, so an unexpected
+interrupt is still caught instead of crashing the machine. The page fault
+handler reads the faulting address out of the
+`CR2` register and prints it.
+
+Each gate packs a 64-bit handler address (split across three fields), a code
+segment selector, and type and privilege bits into the 16-byte format the
+hardware expects. Descriptors are defined as C structs and encoded byte by
+byte in [`kernel/idt/idt.c`](kernel/idt/idt.c):
+
+```c
+static void encode_entry(uint8_t *target, Gate src) {
+    target[0] = src.offset & 0xFF;
+    target[1] = (src.offset >> 8);
+    target[2] = src.seg_selector;
+    /* ... type, DPL, present bit, upper offset bytes ... */
+}
+```
 
 ## Memory management
 
-x86-64 splits a virtual address into four 9-bit table indices and a 12-bit
-page offset:
+x86-64 translates virtual addresses through four levels of page tables: the
+Page Map Level 4 (PML4), the Page Directory Pointer Table (PDPT), the Page
+Directory (PD), and the Page Table (PT). A virtual address encodes a 9-bit
+index into each level, plus a 12-bit offset into the final page:
 
 ```
 MSB                                                              LSB
@@ -65,21 +146,37 @@ MSB                                                              LSB
 +-----------+----------+----------+----------+----------+----------+
 ```
 
-`map_page` walks those four levels, allocating and zeroing any missing table
-from the PMM along the way. `unmap_page` clears the leaf entry and flushes the
-stale TLB entry with the `invlpg` instruction. `va2pa` does a read-only walk.
-The boot self-test maps a page at 1 GiB (deliberately outside the boot-time
-identity map), writes through the virtual address, and reads the same value
-back through the physical one.
+`map_page` walks all four levels, allocating and zeroing any missing table
+along the way. Each level follows the same pattern, from
+[`kernel/vmm/vmm.c`](kernel/vmm/vmm.c):
 
-The PMM places its bitmap right after the kernel image (`kernel_end`, exported
-by the linker script), marks everything reserved, frees the regions the
+```c
+entry = &pml4[PML4_IDX(va)];
+if (!(*entry & 0x1)) *entry = alloc_entry();   /* allocate missing table */
+
+entry = &((uint64_t *)BASE(*entry))[PDPT_IDX(va)];
+/* ... same for PD and PT, then write pa | flags into the leaf */
+```
+
+`unmap_page` clears the leaf entry and flushes the stale TLB (Translation
+Lookaside Buffer) entry with the `invlpg` instruction. `va2pa` does a
+read-only walk and returns the physical address, which is what the self-test
+uses to verify mappings independently.
+
+The physical allocator ([`kernel/pmm/pmm.c`](kernel/pmm/pmm.c)) parses the
+Multiboot2 memory map, sizes a bitmap with one bit per 4 KiB frame, and places
+it right after the kernel image at `kernel_end`, a symbol exported by the
+linker script. It starts with all memory reserved, frees the regions the
 firmware reports usable, then re-reserves the first 2 MiB, the kernel itself,
 and the bitmap's own frames.
 
 ## Build and run
 
-Needs an `x86_64-elf` cross-compiler, `grub-mkrescue`, and QEMU:
+Needs an `x86_64-elf` cross-compiler, `grub-mkrescue`, and QEMU.
+
+The OSDev wiki has a
+[guide for building the cross-compiler](https://wiki.osdev.org/GCC_Cross-Compiler);
+follow it with `x86_64-elf` as the target.
 
 ```sh
 make        # build the kernel ELF
@@ -87,18 +184,42 @@ make iso    # wrap it in a bootable GRUB image
 make run    # boot it in QEMU
 ```
 
-Compiler flags worth noting: `-ffreestanding` (no libc), `-mcmodel=kernel`
-(higher-half addressing), and no SSE/MMX/x87 because the kernel doesn't save
-FPU state yet.
+Compiler flags worth noting: `-ffreestanding`, which stops GCC from assuming a
+libc or a hosted environment, and `-mcmodel=kernel`, which tells GCC the code
+lives in the top 2 GiB of the address space, so kernel symbols can be reached
+with sign-extended 32-bit offsets instead of full 64-bit addresses.
 
 ## Roadmap
 
 - kernel heap (`kmalloc`)
-- timer + keyboard interrupts (PIC/APIC)
+- timer and keyboard interrupts
 - preemptive scheduler
-- PCI enumeration
+- userspace
+
+## Resources
+
+The [OSDev wiki](https://wiki.osdev.org) was the main reference for this
+project. If you want to learn more, here are some of the references I used:
+
+- Long mode: [Setting Up Long Mode](https://wiki.osdev.org/Setting_Up_Long_Mode)
+- Higher-half layout: [Higher Half Kernel](https://wiki.osdev.org/Higher_Half_Kernel)
+- Interrupts: [Interrupt Descriptor Table](https://wiki.osdev.org/Interrupt_Descriptor_Table)
+- Paging: [Paging](https://wiki.osdev.org/Paging)
+- Physical memory: [Page Frame Allocation](https://wiki.osdev.org/Page_Frame_Allocation)
+- x86-64 architecture reference: [Intel SDM, Volume 3](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html)
+
+## Credit
+
+Parts of this kernel started from [OSDev wiki](https://osdev.wiki/wiki/Expanded_Main_Page) tutorials:
+
+- The VGA text driver boilerplate is adapted from
+  [Bare Bones](https://wiki.osdev.org/Bare_Bones).
+- Some of the assembly for paging and entering long mode is adapted from
+  [Setting Up Long Mode](https://wiki.osdev.org/Setting_Up_Long_Mode) and
+  [Higher Half x86 Bare Bones](https://wiki.osdev.org/Higher_Half_x86_Bare_Bones).
+
+Everything else is written from scratch.
 
 ---
 
-Named after my dog Winnie.
-Main reference: [osdev.wiki](https://wiki.osdev.org)
+_winnieOS is named after my dog winnie_
