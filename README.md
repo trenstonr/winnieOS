@@ -1,10 +1,11 @@
 work-in-progress operating system from scratch
 ## 
 
-#### Working on:
- - Virtual memory / paging
+#### Working on
+ - ?
 
 #### Done:
+ - Virtual memory / paging
  - Physical memory manager  
  - Interrupt Descriptor Table
  - Migrating from x86 to x86-64
