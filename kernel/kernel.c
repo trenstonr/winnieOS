@@ -1,53 +1,42 @@
-#include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
 #include "idt/idt.h"
 #include "pmm/pmm.h"
-#include "vmm/vmm.h"
+#include "selftest/selftest.h"
 
 #include <drivers/vga.h>
-#include <lib/printf.h>
 
 /* Check if the compiler thinks you are targeting the wrong operating system. */
 #if defined(__linux__)
-#error "You are not using a cross-compiler, you will most certainly run into trouble"
+#error "You are not using a cross-compiler"
 #endif
 
 #if !defined(__x86_64__)
 #error "This kernel needs to be compiled with a x86_64 compiler"
 #endif
 
-void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_addr) 
+/*
+ * First C code to run. boot.s has already verified long mode support, built
+ * the initial page tables, enabled paging, and jumped into the higher half
+ * before calling this with the multiboot2 magic and info pointer.
+ */
+void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info_addr)
 {
 	terminal_initialize();
+	banner();
+
+	ok("cpu", "64-bit long mode, higher-half kernel at 0xffffffff80200000");
+
 	idt_init();
+	ok("idt", "256 interrupt gates armed (#DE #DF #GP #PF handled)");
+
 	pmm_init(multiboot_magic, multiboot_info_addr);
+	uint64_t total_frames = pmm_free_count();
+	ok("pmm", "bitmap frame allocator over the multiboot2 memory map");
 
-	// test IDT with interrupt 0 (divide by 0 error)
-	// __asm__("int $0x0");
+	ok("vmm", "4-level paging (PML4 -> PDPT -> PD -> PT)");
 
-	// test PMM
-	uint64_t a = pmm_alloc_frame(), b = pmm_alloc_frame(), c = pmm_alloc_frame();
-	printf("PMM TEST: %llx %llx %llx", a, b, c);
-
-	// test VMM
-	uint64_t cr3;
-	__asm__ volatile ("mov %%cr3, %0" : "=r"(cr3));
-	
-	uint64_t *pml4 = (uint64_t *)BASE(cr3);
-	uint64_t va = 0x40000000;
-	uint64_t x = pmm_alloc_frame();
-	map_page(pml4, va, x, 0x3);
-
-	uint64_t *mem = (uint64_t *)va;
-	*mem = 0xCAFEBABE;
-
-	unmap_page(pml4, va);
-	printf("\n\nVMM TEST: (va)%llx (pa)%llx", *mem, *(uint64_t *)x);
-	printf("\nva2pa TEST: (mapped)%llx (not mapped)%llx", va2pa(pml4, va), va2pa(pml4, 0x50000000));
-	
-	// printf tests
-	printf("\n\nPRINTF TEST: s: %s, llx: %llx", "Winnie", 0xdeadbeef12340987);
-
+	selftest_pmm();
+	selftest_vmm();
+	status_bar(total_frames);
 }
