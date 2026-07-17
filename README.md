@@ -3,7 +3,7 @@
 A 64-bit operating system kernel for x86-64, written from scratch in C and
 assembly.
 
-GRUB loads the binary. Everything after that is code in this repo: the switch
+GRUB loads the binary. Everything after that is manually done: switching
 into 64-bit long mode, the page tables, the interrupt handlers, and the memory
 allocators. The kernel is freestanding, with no libc and no runtime. 
 
@@ -189,13 +189,6 @@ libc or a hosted environment, and `-mcmodel=kernel`, which tells GCC the code
 lives in the top 2 GiB of the address space, so kernel symbols can be reached
 with sign-extended 32-bit offsets instead of full 64-bit addresses.
 
-## Roadmap
-
-- kernel heap (`kmalloc`)
-- timer and keyboard interrupts
-- preemptive scheduler
-- userspace
-
 ## Resources
 
 The [OSDev wiki](https://wiki.osdev.org) was the main reference for this
@@ -214,11 +207,9 @@ Parts of this kernel started from [OSDev wiki](https://osdev.wiki/wiki/Expanded_
 
 - The VGA text driver boilerplate is adapted from
   [Bare Bones](https://wiki.osdev.org/Bare_Bones).
-- Some of the assembly for paging and entering long mode is adapted from
-  [Setting Up Long Mode](https://wiki.osdev.org/Setting_Up_Long_Mode) and
-  [Higher Half x86 Bare Bones](https://wiki.osdev.org/Higher_Half_x86_Bare_Bones).
-
-Everything else is written from scratch.
+- Notable amounts of assembly for components throughout this project are adapted from
+  [Setting Up Long Mode](https://wiki.osdev.org/Setting_Up_Long_Mode),
+  [Higher Half x86 Bare Bones](https://wiki.osdev.org/Higher_Half_x86_Bare_Bones), and various other pages/tutorials from the wiki.
 
 ---
 
