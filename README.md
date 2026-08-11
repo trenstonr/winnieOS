@@ -3,7 +3,7 @@
 A 64-bit operating system kernel for x86-64, written from scratch in C and
 assembly.
 
-GRUB loads the binary. Everything after that is manually done: switching
+GRUB loads the binary and everything after is manually done: switching
 into 64-bit long mode, the page tables, the interrupt handlers, and the memory
 allocators. The kernel is freestanding, with no libc and no runtime. 
 
